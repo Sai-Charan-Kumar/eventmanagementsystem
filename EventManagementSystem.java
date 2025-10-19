@@ -532,7 +532,6 @@ class OrganizerDashboard extends JFrame {
     private DefaultTableModel eventsModel;
     private DefaultTableModel venuesModel;
     private DefaultTableModel attendeesModel;
-    // FIX: Add a model for the dashboard's own table
     private DefaultTableModel dashboardEventsModel;
 
 
@@ -556,7 +555,6 @@ class OrganizerDashboard extends JFrame {
         eventsModel = new DefaultTableModel();
         venuesModel = new DefaultTableModel();
         attendeesModel = new DefaultTableModel();
-        // FIX: Initialize the dashboard's model
         dashboardEventsModel = new DefaultTableModel();
 
         // Load initial data into models
@@ -582,7 +580,7 @@ class OrganizerDashboard extends JFrame {
         loadEventsData(eventsModel);
         loadVenuesData(venuesModel);
         loadAttendeesData(attendeesModel);
-        // FIX: Also refresh the dashboard's event table model
+        // Also refresh the dashboard's event table model
         loadEventsData(dashboardEventsModel);
     }
 
@@ -773,7 +771,7 @@ class OrganizerDashboard extends JFrame {
         recentLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         recentLabel.setForeground(EventManagementSystem.TEXT_PRIMARY);
 
-        // FIX: Use the member model 'dashboardEventsModel' so it can be refreshed
+        // Use the member model 'dashboardEventsModel' so it can be refreshed
         JTable recentTable = new JTable(dashboardEventsModel);
         styleTable(recentTable);
 
@@ -1121,7 +1119,6 @@ class OrganizerDashboard extends JFrame {
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(226, 232, 240)));
     }
 }
-
 /**
  * Attendee Dashboard
  */
@@ -1132,6 +1129,9 @@ class AttendeeDashboard extends JFrame {
 
     // Models for Attendee data
     private DefaultTableModel ticketsModel;
+
+    // Reference to the browse panel so it can be removed and refreshed
+    private JPanel browseEventsPanel;
 
     public AttendeeDashboard(String email) {
         this.userEmail = email;
@@ -1155,7 +1155,9 @@ class AttendeeDashboard extends JFrame {
         contentPanel = new JPanel(cardLayout);
         contentPanel.setBackground(EventManagementSystem.BG_COLOR);
 
-        contentPanel.add(createBrowseEventsPanel(), "browse");
+        // Create and store the browse panel
+        browseEventsPanel = createBrowseEventsPanel();
+        contentPanel.add(browseEventsPanel, "browse");
         contentPanel.add(createMyTicketsPanel(), "tickets");
         contentPanel.add(createProfilePanel(), "profile");
 
@@ -1171,6 +1173,28 @@ class AttendeeDashboard extends JFrame {
     public void refreshMyTickets() {
         loadTicketsData(ticketsModel);
     }
+
+    /**
+     * Public method to refresh the "Browse Events" panel.
+     * This method removes the old panel and adds a new one built with fresh data.
+     */
+    public void refreshBrowseEvents() {
+        // Remove the old panel
+        if (browseEventsPanel != null) {
+            contentPanel.remove(browseEventsPanel);
+        }
+
+        // Create a new panel with fresh data
+        browseEventsPanel = createBrowseEventsPanel();
+
+        // Add the new panel back to the card layout
+        contentPanel.add(browseEventsPanel, "browse");
+
+        // Re-validate and repaint the container
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
+
 
     private void loadTicketsData(DefaultTableModel model) {
         // Only load if a user is actually logged in
@@ -1301,7 +1325,21 @@ class AttendeeDashboard extends JFrame {
 
         for (Vector<Object> eventRow : eventsData) {
             String name = (String) eventRow.get(1);
-            Date dateObj = (Date) eventRow.get(2);
+
+            // ================== FIX IS HERE ==================
+            // Handle different date/time objects from JDBC
+            Object dateObject = eventRow.get(2);
+            java.util.Date dateObj = null;
+            if (dateObject instanceof java.sql.Timestamp) {
+                dateObj = (java.sql.Timestamp) dateObject;
+            } else if (dateObject instanceof java.time.LocalDateTime) {
+                java.time.LocalDateTime ldt = (java.time.LocalDateTime) dateObject;
+                dateObj = java.util.Date.from(ldt.atZone(java.time.ZoneId.systemDefault()).toInstant());
+            } else if (dateObject instanceof java.util.Date) {
+                dateObj = (java.util.Date) dateObject;
+            }
+            // ================= END OF FIX ==================
+
             String date = (dateObj != null) ? new java.text.SimpleDateFormat("MMM dd, yyyy").format(dateObj) : "TBD";
             String venue = (String) eventRow.get(3);
             int capacity = (Integer) eventRow.get(4);
@@ -1371,7 +1409,8 @@ class AttendeeDashboard extends JFrame {
         registerBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         registerBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        if (sold.equals(capacity)) {
+        // Check if sold is greater than or equal to capacity
+        if (Integer.parseInt(sold) >= Integer.parseInt(capacity)) {
             registerBtn.setText("Sold Out (E1)");
             registerBtn.setBackground(EventManagementSystem.DANGER_COLOR);
             registerBtn.setEnabled(false);
@@ -1415,9 +1454,7 @@ class AttendeeDashboard extends JFrame {
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         titleLabel.setForeground(EventManagementSystem.TEXT_PRIMARY);
 
-        // FIX: Removed redundant loadTicketsData(ticketsModel) call.
-        // The model is already loaded in the constructor.
-
+        // Model is already loaded in the constructor and refreshed via refreshMyTickets()
         JTable ticketsTable = new JTable(ticketsModel);
         styleTable(ticketsTable);
         ticketsTable.setRowHeight(45);
@@ -1455,6 +1492,8 @@ class AttendeeDashboard extends JFrame {
             name = (String) userData.get(0).get(0);
             email = (String) userData.get(0).get(1);
 
+            // ================== FIX IS HERE ==================
+            // Handle different date/time objects from JDBC
             Object regDateObject = userData.get(0).get(2);
             java.util.Date regDate = null;
 
@@ -1467,8 +1506,10 @@ class AttendeeDashboard extends JFrame {
             } else if (regDateObject instanceof java.util.Date) {
                 regDate = (java.util.Date) regDateObject;
             }
+            // ================= END OF FIX ==================
 
-            if(regDate != null) {
+
+            if (regDate != null) {
                 memberSince = new java.text.SimpleDateFormat("MMMM yyyy").format(regDate);
             }
         }
@@ -1537,6 +1578,7 @@ class AttendeeDashboard extends JFrame {
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 2, 0, new Color(226, 232, 240)));
     }
 }
+
 /**
  * Create Event Dialog (F2 & F3)
  */
@@ -1584,7 +1626,7 @@ class CreateEventDialog extends JDialog {
         formPanel.add(createLabel("Venue *"));
         Vector<String> venueNames = new Vector<>();
         Vector<Vector<Object>> venueData = DatabaseHelper.executeSelect("SELECT name FROM Venues", new Vector<>());
-        for(Vector<Object> row : venueData) {
+        for (Vector<Object> row : venueData) {
             venueNames.add((String) row.get(0));
         }
         venueCombo = new JComboBox<>(venueNames.toArray(new String[0]));
@@ -1696,12 +1738,12 @@ class CreateEventDialog extends JDialog {
         String description = descArea.getText().trim();
         String venueName = (String) venueCombo.getSelectedItem();
         String eventType = (String) categoryCombo.getSelectedItem();
-        Date startTime = (Date) dateSpinner.getValue();
+        Date datePart = (Date) dateSpinner.getValue();
         Date timePart = (Date) timeSpinner.getValue(); // Get time part
 
         // Combine Date and Time correctly
         java.util.Calendar calDate = java.util.Calendar.getInstance();
-        calDate.setTime(startTime);
+        calDate.setTime(datePart);
 
         java.util.Calendar calTime = java.util.Calendar.getInstance();
         calTime.setTime(timePart);
@@ -1795,7 +1837,7 @@ class CreateEventDialog extends JDialog {
 
             // 4. Insert Venue Schedule (F3) - Locks the time slot
             String insertScheduleQuery = "INSERT INTO Venue_Schedules (venue_id, event_id, start_time, end_time) VALUES (?, ?, ?, ?)";
-            try(PreparedStatement scheduleStmt = conn.prepareStatement(insertScheduleQuery)) {
+            try (PreparedStatement scheduleStmt = conn.prepareStatement(insertScheduleQuery)) {
                 scheduleStmt.setInt(1, venueId);
                 scheduleStmt.setInt(2, newEventId);
                 scheduleStmt.setTimestamp(3, new Timestamp(combinedStartTime.getTime()));
@@ -2122,8 +2164,7 @@ class TicketPurchaseDialog extends JDialog {
                 String uniqueCode = "T" + eventId + "-" + (new Random().nextInt(9000000) + 1000000); // Unique Ticket ID (F5)
 
                 // 1. Insert Ticket (F5)
-                String insertTicketQuery = "INSERT INTO Tickets (unique_code, event_id, attendee_id, ticket_type, price, status) VALUES (?, ?, ?, ?, ?, 'Confirmed')";
-                try (PreparedStatement insertTicketStmt = conn.prepareStatement(insertTicketQuery, Statement.RETURN_GENERATED_KEYS)) {
+                try (PreparedStatement insertTicketStmt = conn.prepareStatement("INSERT INTO Tickets (unique_code, event_id, attendee_id, ticket_type, price, status) VALUES (?, ?, ?, ?, ?, 'Confirmed')", Statement.RETURN_GENERATED_KEYS)) {
                     insertTicketStmt.setString(1, uniqueCode);
                     insertTicketStmt.setInt(2, eventId);
                     insertTicketStmt.setInt(3, attendeeId);
@@ -2141,8 +2182,7 @@ class TicketPurchaseDialog extends JDialog {
                         }
 
                         // 2. Insert Payment Record (F5)
-                        String insertPaymentQuery = "INSERT INTO Payments (ticket_id, amount, transaction_type, transaction_status, payment_gateway_ref) VALUES (?, ?, 'Purchase', 'Success', ?)";
-                        try (PreparedStatement paymentStmt = conn.prepareStatement(insertPaymentQuery)) {
+                        try (PreparedStatement paymentStmt = conn.prepareStatement("INSERT INTO Payments (ticket_id, amount, transaction_type, transaction_status, payment_gateway_ref) VALUES (?, ?, 'Purchase', 'Success', ?)")) {
                             paymentStmt.setInt(1, newTicketId);
                             paymentStmt.setDouble(2, TICKET_PRICE);
                             paymentStmt.setString(3, "REF" + uniqueCode);
@@ -2163,9 +2203,11 @@ class TicketPurchaseDialog extends JDialog {
                     "Ticket(s) purchased successfully! (F5)\nTotal Amount: $" + String.format("%.2f", totalAmount),
                     "Success (F5)", JOptionPane.INFORMATION_MESSAGE);
 
-            // FIX: Refresh the "My Tickets" panel on the AttendeeDashboard
+            // Refresh BOTH panels on the AttendeeDashboard
             if (getParent() instanceof AttendeeDashboard) {
-                ((AttendeeDashboard) getParent()).refreshMyTickets();
+                AttendeeDashboard dash = (AttendeeDashboard) getParent();
+                dash.refreshMyTickets();     // Refresh the tickets table
+                dash.refreshBrowseEvents();  // Refresh the event browsing panel
             }
 
             dispose();
@@ -2194,7 +2236,7 @@ class ButtonRenderer extends JPanel implements TableCellRenderer {
     private JButton editBtn, deleteBtn;
 
     public ButtonRenderer() {
-        // FIX: Use GridLayout to prevent wrapping/overlapping
+        // Use GridLayout to prevent wrapping/overlapping
         setLayout(new GridLayout(1, 0, 5, 0));
         setOpaque(true);
 
@@ -2241,7 +2283,7 @@ class ButtonEditor extends DefaultCellEditor {
         this.table = table;
         this.entityType = entityType;
 
-        // FIX: Use GridLayout to prevent wrapping/overlapping
+        // Use GridLayout to prevent wrapping/overlapping
         panel = new JPanel(new GridLayout(1, 0, 5, 0));
 
         editBtn = new JButton("Edit");
@@ -2377,7 +2419,6 @@ class CheckInButtonEditor extends DefaultCellEditor {
     private void handleCheckIn() {
         String ticketStatus = (String) model.getValueAt(row, 5);
         String ticketCode = (String) model.getValueAt(row, 4);
-        int attendeeId = (Integer) model.getValueAt(row, 0);
 
         if (ticketStatus.equals("Used") || ticketStatus.equals("Checked-In")) {
             JOptionPane.showMessageDialog(button, "Already Checked-In: This ticket was already used. (F6)", "Exception (F6)", JOptionPane.WARNING_MESSAGE);
@@ -2426,12 +2467,15 @@ class CheckInButtonEditor extends DefaultCellEditor {
         } catch (SQLException e) {
             try {
                 if (conn != null) conn.rollback();
-            } catch (SQLException ex) {}
+            } catch (SQLException ex) {
+            }
             JOptionPane.showMessageDialog(button, "Check-in failed due to database error: " + e.getMessage(), "DB Error", JOptionPane.ERROR_MESSAGE);
         } finally {
             try {
                 if (conn != null) conn.close();
-            } catch (SQLException e) { e.printStackTrace(); }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
 
         fireEditingStopped();
@@ -2465,7 +2509,7 @@ class TicketActionRenderer extends JPanel implements TableCellRenderer {
     private JButton viewBtn, cancelBtn;
 
     public TicketActionRenderer() {
-        // FIX: Use GridLayout to prevent wrapping/overlapping
+        // Use GridLayout to prevent wrapping/overlapping
         setLayout(new GridLayout(1, 0, 5, 0));
         setOpaque(true);
 
@@ -2518,7 +2562,7 @@ class TicketActionEditor extends DefaultCellEditor {
         this.model = model;
         this.table = table;
 
-        // FIX: Use GridLayout to prevent wrapping/overlapping
+        // Use GridLayout to prevent wrapping/overlapping
         panel = new JPanel(new GridLayout(1, 0, 5, 0));
 
         viewBtn = new JButton("View");
@@ -2551,7 +2595,6 @@ class TicketActionEditor extends DefaultCellEditor {
 
     private void handleCancelTicket() {
         String ticketID = (String) model.getValueAt(row, 0);
-        String eventName = (String) model.getValueAt(row, 1);
         String status = (String) model.getValueAt(row, 4);
 
         if (status.equals("Cancelled") || status.equals("Used") || status.equals("Refunded")) {
@@ -2574,9 +2617,9 @@ class TicketActionEditor extends DefaultCellEditor {
                 String fetchTicket = "SELECT ticket_id, price FROM Tickets WHERE unique_code = ?";
                 int ticketDbId = -1;
                 double price = 0.0;
-                try(PreparedStatement stmt = conn.prepareStatement(fetchTicket)) {
+                try (PreparedStatement stmt = conn.prepareStatement(fetchTicket)) {
                     stmt.setString(1, ticketID);
-                    try(ResultSet rs = stmt.executeQuery()) {
+                    try (ResultSet rs = stmt.executeQuery()) {
                         if (rs.next()) {
                             ticketDbId = rs.getInt("ticket_id");
                             price = rs.getDouble("price");
@@ -2616,12 +2659,15 @@ class TicketActionEditor extends DefaultCellEditor {
             } catch (SQLException e) {
                 try {
                     if (conn != null) conn.rollback();
-                } catch (SQLException ex) {}
+                } catch (SQLException ex) {
+                }
                 JOptionPane.showMessageDialog(panel, "Ticket Cancellation Failed: " + e.getMessage(), "DB Error", JOptionPane.ERROR_MESSAGE);
             } finally {
                 try {
                     if (conn != null) conn.close();
-                } catch (SQLException e) { e.printStackTrace(); }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                     }
             }
         }
         fireEditingStopped();
